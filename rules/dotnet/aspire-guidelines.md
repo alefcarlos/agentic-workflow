@@ -20,14 +20,13 @@ dotnet build
 # Run the API service directly (without Aspire)
 dotnet run --project SampleAspNetCoreMcp.ApiService
 
-# Run with Aspire (includes Keycloak, API service, MCP Inspector)
-aspire run
-
 # Build a specific project
 dotnet build SampleAspNetCoreMcp.ApiService/SampleAspNetCoreMcp.ApiService.csproj
 ```
 
 ## Running the Application
+
+You must run the following comand in a new session and after the the validation you must kill the process.
 
 ```bash
 aspire run
