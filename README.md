@@ -3,7 +3,15 @@
 ```bash
 mkdir -p .agents/skills
 mkdir -p .agents/rules
-```
+``
+
+## Agentes de código
+
+- [opencode](https://opencode.ai/)
+
+### Plugins
+
+- [opencode-pty](https://github.com/shekohex/opencode-pty.git)
 
 ## MCP Servers
 
