@@ -3,7 +3,7 @@
 ```bash
 mkdir -p .agents/skills
 mkdir -p .agents/rules
-``
+```
 
 ## Agentes de código
 
