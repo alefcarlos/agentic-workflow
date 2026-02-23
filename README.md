@@ -1,23 +1,32 @@
 # Meu workflow para agentes de código
 
-## MCP Servces
-
-### dotnet
-- [aspire](https://aspire.dev/dashboard/mcp-server/)
-- playwright
-
-### Task Management
-
-- [backlog](https://github.com/MrLesk/Backlog.md)
-
-## Instalando
-
-### 1. Adicionar como subtree
-
-```sh
-git subtree add --prefix=.agents.core https://github.com/alefcarlos/agentic-workflow.git main --squash
+```bash
+mkdir -p .agents/skills
+mkdir -p .agents/rules
 ```
 
-### 2. Fazer symlink dos recursos necessários para o projeto
+## MCP Servers
 
-TBD 
+- [aspire](https://aspire.dev/dashboard/mcp-server/)
+- playwright
+- [backlog](https://github.com/MrLesk/Backlog.md)
+
+## dotnet
+
+```bash
+curl -o .agents/rules/aspire-guidelines.md https://raw.githubusercontent.com/alefcarlos/agentic-workflow/refs/heads/main/rules/dotnet/aspire-guidelines.md
+```
+
+### task-management
+
+```bash
+mkdir -p .agents/skills/implement-task
+mkdir -p .agents/skills/plan-feature
+mkdir -p .agents/skills/refinar-task
+
+curl -o .agents/rules/backlogmd-guidelines.md https://raw.githubusercontent.com/alefcarlos/agentic-workflow/refs/heads/main/rules/task-management/backlogmd-guidelines.md
+
+curl -o .agents/skills/implement-task/SKILL.md https://raw.githubusercontent.com/alefcarlos/agentic-workflow/refs/heads/main/skills/task-management/implement-task/SKILL.md
+curl -o .agents/skills/plan-feature/SKILL.md https://raw.githubusercontent.com/alefcarlos/agentic-workflow/refs/heads/main/skills/task-management/plan-feature/SKILL.md
+curl -o .agents/skills/refinar-task/SKILL.md https://raw.githubusercontent.com/alefcarlos/agentic-workflow/refs/heads/main/skills/task-management/refinar-task/SKILL.md
+```
