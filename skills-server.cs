@@ -2,6 +2,7 @@
 
 #:sdk Microsoft.NET.Sdk.Web
 #:property TargetFramework=net10.0
+//Due to https://github.com/aaubry/YamlDotNet/issues/1031
 #:property PublishAot=false
 #:package YamlDotNet@16.3.0
 #:package Vecc.YamlDotNet.Analyzers.StaticGenerator@16.3.0
