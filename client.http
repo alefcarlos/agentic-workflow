@@ -1,0 +1,13 @@
+GET http://localhost:8080/.well-known/skills/index.json
+
+###
+
+GET http://localhost:8080/.well-known/skills/alef/SKILL.md
+
+###
+
+GET http://localhost:8080/.well-known/skills/implement-task/SKILL.md
+
+###
+
+GET http://localhost:8080/.well-known/skills/implement-task/docs/README.md
