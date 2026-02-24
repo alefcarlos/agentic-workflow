@@ -1,6 +1,6 @@
 # Meu workflow para agentes de código
 
-## Agent Skills Discovery Server
+## [Agent Skills Discovery Server](https://github.com/cloudflare/agent-skills-discovery-rfc)
 
 ```bash
 docker run --rm --name skills-server -p 8080:8080 $(docker build -q .)
