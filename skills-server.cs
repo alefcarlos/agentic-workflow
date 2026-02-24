@@ -2,18 +2,14 @@
 
 #:sdk Microsoft.NET.Sdk.Web
 #:property TargetFramework=net10.0
-//Due to https://github.com/aaubry/YamlDotNet/issues/1031
-#:property PublishAot=false
-#:package YamlDotNet@16.3.0
-#:package Vecc.YamlDotNet.Analyzers.StaticGenerator@16.3.0
+#:property CopyOutputSymbolsToPublishDirectory=false
 
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.FileProviders;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -39,32 +35,67 @@ app.MapGet("/.well-known/skills/index.json", async (IWebHostEnvironment environm
 
     if (!Directory.Exists(skillsPath))
     {
-        TypedResults.Ok(SkillsIndex.Empty());
+        return TypedResults.Ok(SkillsIndex.Empty());
     }
 
-    static SkillMetadata ParseSkillFrontmatter(string text, string defaultName)
+    static string Sha256(byte[] data)
     {
-        var frontMatterPattern = @"^---\s*[\r\n]+(?<content>.*?)\r?\n---";
-        var match = Regex.Match(text, frontMatterPattern, RegexOptions.Singleline);
-
-        if (!match.Success)
-            return new() { name = defaultName, description = string.Empty };
-
-        var content = match.Groups["content"].Value;
-
-        var deserializer = 
-            new DeserializerBuilder()
-            .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .IgnoreUnmatchedProperties()
-            // new StaticDeserializerBuilder(new AppYamlContext())
-            .Build();
-
-        var metadata = deserializer.Deserialize<SkillMetadata>(content);
-
-        return metadata;
+        var hash = SHA256.HashData(data);
+        return $"sha256:{Convert.ToHexString(hash).ToLowerInvariant()}";
     }
 
-    static async IAsyncEnumerable<SkillEntry> GetSkills(IWebHostEnvironment environment)
+    static async Task<SkillMetadata> GetSkillMetadata(string path)
+    {
+        using var stream = new StreamReader(path);
+        string? name = null;
+        string? description = null;
+        bool startFrontmatter = false;
+
+        while (await stream.ReadLineAsync() is string line && (name is null || description is null))
+        {
+            if (line == "---" && !startFrontmatter)
+            {
+                startFrontmatter = true;
+                continue;
+            }
+
+            if (line == "---" && startFrontmatter)
+            {
+                break;
+            }
+
+            if (line.StartsWith("name:"))
+            {
+                name = line.Split(':', StringSplitOptions.RemoveEmptyEntries)[1];
+            }
+
+            if (line.StartsWith("description:"))
+            {
+                description = line.Split(':', StringSplitOptions.RemoveEmptyEntries)[1];
+            }
+
+            if (name is not null && description is not null) break;
+        }
+
+        return new(name ?? string.Empty, description ?? string.Empty);
+    }
+
+    static async IAsyncEnumerable<FileEntry> GetFiles(string dir)
+    {
+        foreach (var f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+        {
+            var bytes = await File.ReadAllBytesAsync(f);
+            var digest = Sha256(bytes);
+
+            var relative = Path
+                .GetRelativePath(dir, f)
+                .Replace('\\', '/');
+
+            yield return new FileEntry(relative, digest);
+        }
+    }
+
+    static async IAsyncEnumerable<Skill> GetSkills(IWebHostEnvironment environment)
     {
         var skillsPath = Path.Combine(environment.ContentRootPath, "skills");
 
@@ -73,54 +104,77 @@ app.MapGet("/.well-known/skills/index.json", async (IWebHostEnvironment environm
             var skillName = Path.GetFileName(skillDir);
             var skillMdPath = Path.Combine(skillDir, "SKILL.md");
 
-            if (!File.Exists(skillMdPath))
+            var metadata = await GetSkillMetadata(skillMdPath);
+
+            if (metadata.Name == string.Empty || metadata.Description == string.Empty)
                 continue;
 
-            var skillContent = await File.ReadAllTextAsync(skillMdPath);
-            var metadata = ParseSkillFrontmatter(skillContent, skillName);
+            var allFiles = await GetFiles(skillDir).ToArrayAsync();
 
-            var files = Directory.GetFiles(skillDir, "*", SearchOption.AllDirectories)
-                .Select(f => Path.GetRelativePath(skillDir, f).Replace('\\', '/'))
-                .ToArray();
+            var skillMd = allFiles.First(x => x.Path == "SKILL.md");
+            var rest = allFiles.Where(x => x.Path != "SKILL.md").OrderBy(x => x.Path, StringComparer.Ordinal);
+            FileEntry[] files = [skillMd, .. rest];
 
-            yield return new SkillEntry(metadata.name, metadata.description, files);
+            yield return new Skill(metadata.Name, metadata.Description, files.ComputeSkillDigest(), files);
         }
     }
 
     var skills = await GetSkills(environment).ToArrayAsync();
 
-    return TypedResults.Ok(new SkillsIndex(skills));
+    return TypedResults.Ok(new SkillsIndex("0.2.0", skills));
 });
 
 await app.RunAsync();
 
-public class SkillMetadata()
-{
-    public string description { get; set; } = default!;
-    public string name { get; set; } = default!;
-}
-
-
-public record SkillEntry(string Name, string Description, string[] Files);
-public record SkillsIndex(SkillEntry[] Skills);
+public record SkillMetadata(string Name, string Description);
+public record FileEntry(string Path, string Digest);
+public record Skill(string Name, string Description, string Digest, FileEntry[] Files);
+public record SkillsIndex(string Version, Skill[] Skills);
 
 public static class SkillsIndexExtensions
 {
     extension(SkillsIndex source)
     {
-        public static SkillsIndex Empty() => new([]);
+        public static SkillsIndex Empty() => new("0.2.0", []);
+    }
+}
+
+public static class FileEntriesExtensions
+{
+    extension(FileEntry[] source)
+    {
+        public string ComputeSkillDigest()
+        {
+            var sorted = source.OrderBy(f => f.Path, StringComparer.Ordinal);
+
+            var builder = new StringBuilder();
+
+            foreach (var f in sorted)
+            {
+                var hex = f.Digest.StartsWith("sha256:", StringComparison.Ordinal)
+                    ? f.Digest["sha256:".Length..]
+                    : f.Digest;
+
+                builder.Append(f.Path);
+                builder.Append('\0');       // null byte
+                builder.Append(hex);
+                builder.Append('\n');       // LF (0x0A)
+            }
+
+            var manifestBytes = Encoding.UTF8.GetBytes(builder.ToString());
+
+            var hash = SHA256.HashData(manifestBytes);
+            var finalHex = Convert.ToHexString(hash).ToLowerInvariant();
+
+            return $"sha256:{finalHex}";
+        }
     }
 }
 
 [JsonSerializable(typeof(SkillsIndex))]
-[JsonSerializable(typeof(SkillEntry))]
+[JsonSerializable(typeof(Skill))]
+[JsonSerializable(typeof(SkillMetadata))]
+[JsonSerializable(typeof(FileEntry))]
 public partial class AppJsonSerializerContext : JsonSerializerContext
 {
 }
-
-//https://github.com/aaubry/YamlDotNet/issues/1031
-// [YamlStaticContext]
-// [YamlSerializable(typeof(SkillMetadata))]
-// public partial class AppYamlContext : StaticContext
-// {
-// }
